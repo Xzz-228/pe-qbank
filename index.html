@@ -636,6 +636,8 @@
     border:1px solid #ece4d4;border-radius:5px;padding:2px 7px;cursor:pointer;
   }
   .fav-del:hover{color:#b3546b;border-color:#e7c9d1;}
+  .prog-act{background:#fff;color:#5d6b7a;border-color:#dfe5ea;}
+  .prog-act:hover{background:#f7f9fb;border-color:#c9d4de;}
   @media (max-width:680px){
     .toolbar{flex-wrap:wrap;}
     .fav-open{margin-left:0;}
@@ -672,6 +674,9 @@
     </div>
     <div class="score-chip">本轮得分 <b id="scoreNum">—</b><span>/100</span></div>
     <button class="fav-open" id="favOpen" type="button">★ 易错题本 <b id="favNum">0</b></button>
+    <button class="fav-open prog-act" id="progExport" type="button" title="导出作答进度与易错题本">↓ 导出进度</button>
+    <button class="fav-open prog-act" id="progImport" type="button" title="从备份文件恢复进度">↑ 导入进度</button>
+    <input type="file" id="progFile" accept="application/json,.json" hidden>
   </div>
 
   <div class="banner" id="banner"></div>
@@ -7915,6 +7920,68 @@ document.getElementById('submitBtn').addEventListener('click', () => {
   });
   if(changed) favSave();
   favSync();
+});
+
+/* ============================================================
+   进度备份：导出 / 导入作答进度与易错题本（跨域名迁移用）
+   ============================================================ */
+function progExport(){
+  const payload = {
+    app: 'qbank-progress',
+    version: 1,
+    key: KEY,
+    exportedAt: new Date().toISOString(),
+    store: store,
+    fav: favStore
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const name = KEY.indexOf('micro') >= 0 ? '微观经济学' : '政治经济学';
+  a.href = url;
+  a.download = name + '-进度备份-' + new Date().toISOString().slice(0, 10) + '.json';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1500);
+}
+
+function progImport(file){
+  const fr = new FileReader();
+  fr.onload = () => {
+    try{
+      const d = JSON.parse(fr.result);
+      if(!d || d.app !== 'qbank-progress' || !d.store || typeof d.store !== 'object'){
+        throw new Error('不是有效的进度备份文件');
+      }
+      if(d.key && d.key !== KEY){
+        if(!confirm('这份备份属于另一个题库（' + d.key + '），导入会覆盖当前进度。确定继续吗？')) return;
+      } else if(!confirm('导入将覆盖当前题库的作答进度与易错题本，确定继续吗？')) {
+        return;
+      }
+      localStorage.setItem(KEY, JSON.stringify(d.store));
+      if(d.fav && typeof d.fav === 'object'){
+        localStorage.setItem(KEY + '_fav', JSON.stringify(d.fav));
+      } else {
+        localStorage.removeItem(KEY + '_fav');
+      }
+      alert('进度导入成功，页面将重新加载。');
+      location.reload();
+    }catch(e){
+      alert('导入失败：' + e.message);
+    }
+  };
+  fr.readAsText(file, 'utf-8');
+}
+
+document.getElementById('progExport').addEventListener('click', progExport);
+document.getElementById('progImport').addEventListener('click', () => {
+  document.getElementById('progFile').click();
+});
+document.getElementById('progFile').addEventListener('change', e => {
+  const f = e.target.files && e.target.files[0];
+  if(f) progImport(f);
+  e.target.value = '';
 });
 
 favSync();
